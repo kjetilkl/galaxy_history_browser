@@ -11,20 +11,22 @@ public class GalaxyHistoryBrowser {
     
     /**
      * Reads a Galaxy History Archive file and outputs the history to STDOUT
+     * If no filename is provided, a GUI interface will be started up instead
      * @param args The first and only argument should be the path to a file (or URL)
      */
     public static void main(String[] args) {    
-        try {        
-            if (args.length<1) throw new Exception("Missing input file or URL");
-            GalaxyHistoryArchive history=new GalaxyHistoryArchive(args[0]);
-            history.initialize(null);        
-            System.err.println("Galaxy History Archive Format Version: "+history.getExportVersion()+"\n");
-            outputStructure(history.getHistory(), null);
-        } catch (Exception e) {
-            System.err.println(e);
-            // e.printStackTrace();
+        if (args==null || args.length<1) GUI.start();
+        else {
+            try {        
+                GalaxyHistoryArchive history=new GalaxyHistoryArchive(args[0]);
+                history.initialize(null);        
+                System.err.println("Galaxy History Archive Format Version: "+history.getExportVersion()+"\n");
+                outputStructure(history.getHistory(), null);
+            } catch (Exception e) {
+                System.err.println(e);
+                // e.printStackTrace();
+            }
         }
-        
     }
       
     private static void outputStructure(Object o, String indent) {
