@@ -37,7 +37,7 @@
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <mainClass>no.nels.GalaxyHistoryBrowser</mainClass>
+                            <mainClass>no.nels.galaxyhistorybrowser.GalaxyHistoryBrowser</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
