@@ -18,6 +18,8 @@ public class GalaxyHistoryBrowser {
         if (args==null || args.length<1) GUI.start();
         else {
             try {        
+                boolean isURL=(args[0]!=null && (args[0].startsWith("http:")||args[0].startsWith("https:")));
+                System.err.println("Loading Galaxy History from "+((isURL)?"URL":"file")+" : "+args[0]);  
                 GalaxyHistoryArchive history=new GalaxyHistoryArchive(args[0]);
                 history.initialize(null);        
                 System.err.println("Galaxy History Archive Format Version: "+history.getExportVersion()+"\n");
