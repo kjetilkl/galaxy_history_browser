@@ -11,9 +11,6 @@ with datasets and collections, show metadata for selected datasets and display p
 
 ![Screenshot](http://folk.ntnu.no/kjetikl/galaxy/galaxy_history_browser.png)
 
-### Note
-
-This tool is currently under development and is still considered to be in "pre-release" stage.
 
 
 ### Prerequisites
