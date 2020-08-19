@@ -1,5 +1,9 @@
 /*
- * Objects of this class represents Galaxy History Archives from a specific source (File or URL)
+ * Objects of this class represents Galaxy History Archives (tarballs) retrieved from a specific source (File or URL)
+ * Initializing the object will parse the metadata in the history archive file and transform it into an internal representation that is more managable.
+ * Several convenience methods in this class allows easy accesss to different attributes of the history 
+ * and the contents of individual files within the archive can be accessed directly via InputStreams or InputStreamReaders
+ * 
  */
 package no.nels.galaxyhistorybrowser;
 
@@ -98,7 +102,8 @@ public class GalaxyHistoryArchive {
          
     /** 
      *  Returns an InputStreamReader that reads from a specific file within the archive 
-     *  @param filepath The path to a file inside the tarball. Since the method returns a Reader, this should be a text file (not binary)
+     *  @param filepath The path to a file inside the archive tarball. Since the method returns a Reader, this should be a text file (not binary)
+     *  @return An InputStreamReader that allows direct read access to the file
      */
     public InputStreamReader getInputStreamReaderForFile(String filepath) throws Exception {
         InputStream source=(archivepath.startsWith("http:") || archivepath.startsWith("https:"))?((new URL(archivepath)).openStream()):new FileInputStream(archivepath);
@@ -115,7 +120,8 @@ public class GalaxyHistoryArchive {
     
     /** 
      *  Returns an InputStream that streams from a specific file within the archive 
-     *  @param filepath The path to a file inside the tarball. This could be a text file or a binary file
+     *  @param filepath The path to a file inside the archive tarball. This could be a text file or a binary file
+     *  @return An InputStream that allows direct read access to the file     
      */
     public InputStream getInputStreamForFile(String filepath) throws Exception {
         InputStream source=(archivepath.startsWith("http:") || archivepath.startsWith("https:"))?((new URL(archivepath)).openStream()):new FileInputStream(archivepath);
@@ -157,7 +163,7 @@ public class GalaxyHistoryArchive {
         }
         if (!version_file_found) {
             try {
-                reader=getInputStreamReaderForFile("history_attrs.txt");
+                reader=getInputStreamReaderForFile("history_attrs.txt"); // The "export_attrs.txt" file is missing, but it could just be an old archive. Check for a file that should be present.
             } catch (FileNotFoundException ffn) {
                 throw new Exception("The file is probably not a Galaxy History Archive");                      
             }  

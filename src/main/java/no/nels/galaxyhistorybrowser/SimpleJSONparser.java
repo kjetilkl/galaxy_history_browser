@@ -33,6 +33,7 @@ public class SimpleJSONparser {
      */
     public Object parseJSON(InputStreamReader streamreader, String[] attributes) throws IOException, JsonParseException{
         JsonFactory factory = new JsonFactory();
+        factory.enable(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES);
         JsonParser  parser  = factory.createParser(streamreader); 
         Object result=null;
         Set<String> limitToFields=null;

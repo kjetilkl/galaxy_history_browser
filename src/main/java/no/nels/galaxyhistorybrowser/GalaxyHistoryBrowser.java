@@ -1,5 +1,6 @@
 /*
- *
+ * This is the main "driver" class that will either output the contents of a Galaxy History Archive file
+ * to STDOUT (if a filename is given as argument) or start up the GUI to allow interactive browsing.
  */
 package no.nels.galaxyhistorybrowser;
 

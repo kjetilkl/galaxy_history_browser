@@ -24,7 +24,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 
 /**
- *
+ * A graphical user interface that can open a Galaxy History Archive file (represented with a GalaxyHistoryArchive object) and display its metadata and contents.
  * @author kjetikl
  */
 public class GUI extends javax.swing.JFrame {
