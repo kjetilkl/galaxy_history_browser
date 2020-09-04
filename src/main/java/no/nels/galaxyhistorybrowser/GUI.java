@@ -30,6 +30,13 @@ import javax.swing.tree.DefaultTreeModel;
 public class GUI extends javax.swing.JFrame {
 
     private GalaxyHistoryArchive historyArchive=null;
+    private Color COLOR_OK=new Color(175,241,175);
+    private Color COLOR_ERROR=new Color(249,199,197);
+    private Color COLOR_RUNNING=new Color(255,253,204);
+    private Color COLOR_WAITING=new Color(238,238,238);
+    private Color COLOR_PAUSED=new Color(218,237,248);
+    private Color COLOR_DELETED=new Color(196,196,196);
+    private Color COLOR_OTHER=new Color(180,100,180);  // not standard  
     
     /**
      * Creates new form GUI
@@ -308,7 +315,6 @@ public class GUI extends javax.swing.JFrame {
                     String pathname=fileTextField.getText();
                     if (pathname==null || pathname.trim().isEmpty()) throw new Exception("Missing file or URL");
                     historyArchive=new GalaxyHistoryArchive(pathname);
-                    historyArchive.initialize(null);
                 } catch (Exception e) {
                     error=e;
                     return false;
@@ -361,19 +367,29 @@ public class GUI extends javax.swing.JFrame {
     /** Displays the contents of the history archive in the GUI. The historyArchive should already have been processed and validated */
     private void showHistory(GalaxyHistoryArchive historyArchive) {
         try {
-            historyNameLabel.setText(historyArchive.getHistoryAttribute("name"));
-            String attributes="";
-            String tags=historyArchive.getHistoryAttribute("tags");
-            String annotation=historyArchive.getHistoryAttribute("annotation");
-            String created=historyArchive.getHistoryAttribute("create_time");
-            String updated=historyArchive.getHistoryAttribute("update_time");
+            historyNameLabel.setText((String)historyArchive.getHistoryAttribute("name"));
+            String attributes="";            
+            String annotation=(String)historyArchive.getHistoryAttribute("annotation");
+            String created=(String)historyArchive.getHistoryAttribute("create_time");
+            String updated=(String)historyArchive.getHistoryAttribute("update_time");
             if (created!=null && !created.isEmpty()) attributes+="  Created="+created.substring(0,16);
             if (updated!=null && !updated.isEmpty()) attributes+=",  Updated="+updated.substring(0,16);
-            if (tags!=null && !tags.isEmpty()) attributes+=",  Tags=["+tags+"]";
+            Object tagsObject=(Object)historyArchive.getHistoryAttribute("tags");
+            if (tagsObject instanceof String) {
+                if (!((String)tagsObject).isEmpty()) attributes+=",  Tags=["+tagsObject.toString()+"]";
+            } else if (tagsObject instanceof List) {
+                attributes+=",  Tags=[";
+                for (Object tag:(List)tagsObject) {
+                    attributes+=""+tag+","; // this will also add a trailing comma, but I don't really care!
+                }
+                attributes+="]";
+            }        
             if (annotation!=null && !annotation.isEmpty()) attributes+=",  Annotation="+annotation;
             historyAttributesLabel.setText(attributes);
             // 
-            DefaultMutableTreeNode root=getTreeRepresentation(historyArchive.getHistory());
+            Map<String,Object> history=historyArchive.getHistory();
+            List<Map> contents=(List<Map>)history.get("contents");
+            DefaultMutableTreeNode root=getTreeRepresentation(contents);
             historyTree.setCellRenderer(new HistoryRenderer());
             historyTree.setRootVisible(false);
             historyTree.setModel(new DefaultTreeModel(root));    
@@ -398,6 +414,7 @@ public class GUI extends javax.swing.JFrame {
             StringBuilder builder=new StringBuilder();
             builder.append("Name: "+historyEntry.get("name")+"\n");
             if (historyEntry.containsKey("hid")) builder.append("HID: "+historyEntry.get("hid")+"\n");
+            if (historyEntry.containsKey("encoded_id")) builder.append("encoded_id: "+historyEntry.get("encoded_id")+"\n");
             if (historyEntry.get("class").equals("dataset")) {
                 builder.append("Type: dataset\n");
                 builder.append("Format: "+historyEntry.get("extension")+"\n");
@@ -416,14 +433,14 @@ public class GUI extends javax.swing.JFrame {
         }
     }
     
-    private void displayDataset(String filename, int bytes) {
+    private void displayDataset(final String filename, final int bytes) {
         SwingWorker worker = new SwingWorker<Boolean, Object>() {
             Exception error=null;
             String contents=null;
             @Override
             public Boolean doInBackground() {
                 try {
-                    InputStream stream=historyArchive.getInputStreamForFile(filename);
+                    InputStream stream=historyArchive.getInputStreamForFile(filename, true);
                     byte[] buffer=new byte[bytes];
                     int length=stream.read(buffer);
                     contents=new String(buffer);
@@ -494,12 +511,26 @@ public class GUI extends javax.swing.JFrame {
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean isSelected,boolean expanded,boolean leaf, int row,boolean hasFocus) {
             JLabel comp=(JLabel)super.getTreeCellRendererComponent(tree, value, isSelected, expanded, leaf, row, hasFocus);
+            comp.setOpaque(true); 
             DefaultMutableTreeNode node=(DefaultMutableTreeNode)value;
             Object userobject=node.getUserObject();
             if (userobject instanceof Map) {
                 Map historyEntry=(Map)userobject;
                 Object hid=historyEntry.get("hid");
                 String name=(String)historyEntry.get("name");
+                String state=(String)historyEntry.get("state");
+                if (state==null) state="other";
+                switch(state) {
+                    case "ok": comp.setBackground(COLOR_OK);break;
+                    case "error": comp.setBackground(COLOR_ERROR);break;
+                    case "waiting": comp.setBackground(COLOR_WAITING);break;
+                    case "running": comp.setBackground(COLOR_RUNNING);break;
+                    case "paused": comp.setBackground(COLOR_PAUSED);break;
+                    case "deleted": comp.setBackground(COLOR_DELETED);break;                   
+                    default: comp.setBackground(COLOR_OTHER);break;
+                }
+                comp.setForeground(Color.BLACK);
+                if (isSelected) comp.setBackground(comp.getBackground().darker());
                 if (historyEntry.containsKey("displayLabel")) {
                     name="<b><font color='blue'>"+historyEntry.get("displayLabel")+"</font></b> &rArr; "+historyEntry.get("datasetName");
                 } else {
@@ -517,7 +548,7 @@ public class GUI extends javax.swing.JFrame {
     
     /**
      */
-    public static void start() {
+    public static void start(final String historyArcvhivePath) {
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
@@ -544,7 +575,12 @@ public class GUI extends javax.swing.JFrame {
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
-                new GUI().setVisible(true);
+                GUI gui=new GUI();
+                gui.setVisible(true);
+                if (historyArcvhivePath!=null) {
+                    gui.fileTextField.setText(historyArcvhivePath);
+                    gui.openHistoryButtonActionPerformed(null);
+                }
             }
         });
     }

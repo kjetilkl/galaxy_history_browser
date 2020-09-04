@@ -108,18 +108,20 @@ public class SimpleJSONparserTest {
                 +     "{'id':1,'name':'analysis 1','active':true},"
                 +     "{'id':2,'name':'analysis 21','active':false},"
                 +     "{'id':3,'name':'analysis 43','active':true}"
-                +    "]"
+                +    "],"
+                +  "'empty':[],"
+                +  "'nlist':[null]"
                 + "}";
         InputStream stream = new ByteArrayInputStream(input.getBytes());
         InputStreamReader streamreader = new InputStreamReader(stream);
         String[] attributes = null;
         SimpleJSONparser instance = new SimpleJSONparser();
         HashMap<String, Object> supervisor = new HashMap<>(); supervisor.put("name", "Karen B");supervisor.put("department","HR");
-        ArrayList<Object> students=new ArrayList<Object>();   students.add(32);students.add(979);students.add(12);students.add("graduates");
+        ArrayList<Object> students=new ArrayList<>();   students.add(32);students.add(979);students.add(12);students.add("graduates");
         HashMap<String, Object> project1 = new HashMap<>();   project1.put("id",1);project1.put("name","analysis 1"); project1.put("active",true);
         HashMap<String, Object> project2 = new HashMap<>();   project2.put("id",2);project2.put("name","analysis 21"); project2.put("active",false);
         HashMap<String, Object> project3 = new HashMap<>();   project3.put("id",3);project3.put("name","analysis 43"); project3.put("active",true);       
-        ArrayList<Object> projects=new ArrayList<Object>();   projects.add(project1);projects.add(project2);projects.add(project3);
+        ArrayList<Object> projects=new ArrayList<>();   projects.add(project1);projects.add(project2);projects.add(project3);
         HashMap expResult = new HashMap<String,Object>();
         expResult.put("name","John D");
         expResult.put("age",42);
@@ -127,7 +129,10 @@ public class SimpleJSONparserTest {
         expResult.put("access",true);
         expResult.put("supervisor",supervisor);        
         expResult.put("students",students);
-        expResult.put("projects",projects);        
+        expResult.put("projects",projects);       
+        expResult.put("empty",new ArrayList<>());   
+        ArrayList<Object> nlist=new ArrayList<>();nlist.add(null);
+        expResult.put("nlist",nlist);            
         Object result = instance.parseJSON(streamreader, attributes);
         assertTrue("Returned value is not a HashMap but rather: "+((result==null)?"NULL":result.getClass()), result instanceof HashMap);
         assertTrue("Returned HashMap value is not correct. Expected \""+expResult+"\" ("+(expResult.getClass())+") but got \""+result+"\" ("+((result==null)?"NULL":result.getClass())+")", Objects.deepEquals(expResult, result));

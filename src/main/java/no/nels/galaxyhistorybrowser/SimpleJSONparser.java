@@ -17,23 +17,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Parses JSON from an InputStream and returns a representation of the structure
- * The returned object can either be a Map ("JSON object") or a List (with nested child entries being a combination of Maps, Lists and Basic types (String,Integer,Double,Boolean or NULL)).
+ * This class parses JSON from an InputStream and returns a representation of the structure made up of POJO lists (ArrayList) and maps (HashMap)
+ * The returned object can either be a Map ("JSON object") or a List, with nested child entries being a combination of Maps, Lists and Basic types (String,Integer,Double,Boolean or NULL)
  * @author kjetikl
  */
 public class SimpleJSONparser {
     
     /**
      * 
-     * @param streamreader
+     * @param streamreader 
      * @param attributes If this list is provided (not null), JSON object attribute fields that are not included here will be skipped (note that this also applies to nested attributes)
-     * @return Either a List or Map ("JSON object")
+     * @return Either a List (representing JSON list) or Map (representing JSON object)
      * @throws IOException
      * @throws JsonParseException 
      */
     public Object parseJSON(InputStreamReader streamreader, String[] attributes) throws IOException, JsonParseException{
         JsonFactory factory = new JsonFactory();
-        factory.enable(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES);
+        factory.enable(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES); // allow JSON strings to be enclosed with single quotes in addition to double quotes. Not JSON standard. 
         JsonParser  parser  = factory.createParser(streamreader); 
         Object result=null;
         Set<String> limitToFields=null;
@@ -53,6 +53,12 @@ public class SimpleJSONparser {
         return result;
     }
     
+    /** 
+     * A convenience method for parsing a JSON object. It will call itself recursively if it contains nested objects and call parseJSONlist to parse any nested lists
+     * @param parser A reference to the JSON parser
+     * @param limitToFields If a set of attributes is provided (not null), only JSON object fields that are in this set will be included in the returned object while others will simply be ignored
+     * @return A HashMap representing the JSON object
+     */
     private Map<String,Object> parseJSONobject(JsonParser parser, Set<String> limitToFields) throws IOException, JsonParseException{
         Map<String,Object> map=new HashMap<>();
         String field=null;
@@ -87,6 +93,12 @@ public class SimpleJSONparser {
         throw new JsonParseException(parser, "Unexpected end of map");      
     }
     
+    /** 
+     * A convenience method for parsing a JSON list. It will call itself recursively if it contains nested lists and call parseJSONobject to parse any nested objects   
+     * @param parser A reference to the JSON parser
+     * @param limitToFields If a set of attributes is provided (not null) and the list contains nested objects, only JSON object fields that are in this set will be included in the returned list while others will simply be ignored
+     * @return An ArrayList representing the JSON list
+     */    
     private List<Object> parseJSONlist(JsonParser parser, Set<String> limitToFields) throws IOException, JsonParseException{
         List<Object> list=new ArrayList<>();
         while(!parser.isClosed()){
