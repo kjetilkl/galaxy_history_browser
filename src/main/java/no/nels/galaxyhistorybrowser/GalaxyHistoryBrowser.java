@@ -21,7 +21,7 @@ public class GalaxyHistoryBrowser {
     static int end=-1;              // the (optional) end position inside a file when only a subset of the file should be returned
     static boolean returnVersionOnly=false; // set to TRUE if only the archive format version of the history file should be returned
     static boolean returnMIMEtype=false;    // set to TRUE if only the MIME type of a dataset or file should be returned rather than the full file itself
-    static boolean decompress=false;        // set to TRUE if if compressed datasets should be decompressed 
+    static boolean download=false;          // set to TRUE if datasets should be returned in "download mode" rather than "view mode" (this overrides "decompressed")    
     
     /**
      * Reads a Galaxy History Archive file and outputs the requested content to STDOUT.
@@ -48,15 +48,11 @@ public class GalaxyHistoryBrowser {
                     return;
                 } else if (returnMIMEtype) {
                     if (datasetID==null) throw new IllegalArgumentException("A dataset ID (and possibly extra file) must be specified when the 'mime' option is used");
-                    System.out.println(getMIMEtype(history,datasetID,extraFile,decompress));
+                    System.out.println(history.getMIMEtype(datasetID, extraFile, download));
                     return;
                 }    
                 if (datasetID!=null) { // return a dataset file inside the archive rather than the history itself
-                    if (extraFile!=null) {
-                        history.outputDatasetExtraFile(System.out, datasetID, extraFile, start, end, decompress); // output an extra file associated with the dataset, such as an image file referenced by an HTML dataset
-                    } else {
-                        history.outputDataset(System.out, datasetID, start, end, decompress); // output the main dataset file
-                    }
+                    history.outputDataset(System.out, datasetID, extraFile, download);
                 } else { // output the whole history as JSON 
                     history.outputHistoryAsJSON(System.out, true);
                 }
@@ -74,43 +70,23 @@ public class GalaxyHistoryBrowser {
    
     
     private static void showUsage() {
-        System.err.println("Usage: java -jar GalaxyHistoryBrowser.jar -history <tarball> [-format] [-dataset <id> [-extra <filepath>] [-start <int> -end <int>] [-mime] [-decompress]]\n");   
+        System.err.println("Usage: java -jar GalaxyHistoryBrowser.jar -history <tarball> [-format] [-dataset <id> [-extra <filepath>] [-download] [-mime]] \n");   
         System.err.println("       If only the history option is provided, a JSON representation of the history will be output to STDOUT.");
         System.err.println("       If 'format' option is selected (along with history option), the version format number of the history file will be returned.");
         System.err.println("          2=latest format, 1=older unsupported format, 0=not a Galaxy history file, -1=unable to process file (this is followed by an error message in parentheses).");
         System.err.println("       If the 'dataset' option is provided (along with history), the raw dataset file will be output to STDOUT. The value should be the 'encoded_id' of a dataset.");
         System.err.println("       If the 'extra' option is provided (along with history and dataset), the raw extra file associated with the dataset will be output to STDOUT.");
         System.err.println("       The value of the extra option should be the filepath of the extra file, relative to the location of the main dataset file.");
-        System.err.println("       If the 'start' and/or 'end' options are provided, only a portion of the file (dataset or extra file) will be output.");             
+        // System.err.println("       If the 'start' and/or 'end' options are provided, only a portion of the file (dataset or extra file) will be output.");             
         System.err.println("       If the 'mime' option is selected (along with a dataset or extra file), the MIME type of the dataset (or extra file) is returned.");   
-        System.err.println("       If the 'decompress' option is selected, datasets (and extra files) with either '.gz' or '.bz2' file suffixes will be output in their decompressed form.");         
-        System.err.println("          If this option is used together with the 'mime' option, the MIME type of the decompressed file is output.");          
+        System.err.println("       If the 'download' option is selected, datasets will be output in 'download' mode rather than 'view' mode.");
+        System.err.println("          Datasets are normally downloaded 'as is', in the format they have in the history. The exception is datasets with extra files,");       
+        System.err.println("          which are downloaded as ZIP archives containing the dataset itself plus all the extra files.");
+        System.err.println("          However, in 'view mode' (default) datasets that are compressed in the history will be output as uncompressed.");         
+        System.err.println("          If this option is used together with the 'mime' option, the MIME type of the 'downloaded' dataset is returned.");          
         
     }
       
-    /**
-     * Returns the MIME type of a dataset or extra file inside the history
-     * If extrafilepath is NULL, the MIME type of the main file associated with the dataset is returned.
-     * If extrafilepath is not NULL, the MIME type of this extra file associated with the dataset is returned.
-     * If the file is compressed, e.g. "fastq.gz" it can return either the MIME type of the compressed file ("application/gzip") or the uncompressed file ("text/plain")
-     * 
-     * @param history a GalaxyHistoryArchive with the processed history 
-     * @param dataset The identifier for a dataset inside the history
-     * @param extrafilepath (Optional) the path to an extra file associated with the dataset. The "extra_files_path_#" subdirectory prefix will be derived from the dataset and should not be included.
-     * @param decompress If TRUE and the dataset/file is compressed, the MIME type of the original uncompressed file will be returned rather than the MIME type of the compression format
-     * @return 
-     */
-    private static String getMIMEtype(GalaxyHistoryArchive history, String dataset, String extrafilepath, boolean decompress) {
-        if (extrafilepath!=null) {
-            int p=extrafilepath.indexOf('.');
-            String ext=extrafilepath.substring((p>0)?p:0); // get file suffix from extra file
-            return history.getMIMEtypeFromExtension(ext, decompress);
-        } else {
-            return history.getMIMEtypeForDataset(dataset, decompress);
-        }
-    }
-    
-    
     /**
      * Parses the command-line arguments and sets the static fields in this class to hold them
      * @param args The command-line arguments received by the main(String[] args) method
@@ -155,8 +131,8 @@ public class GalaxyHistoryBrowser {
            } else if (args[current].equals("-mime")) {
                returnMIMEtype=true;
                current+=1;
-           } else if (args[current].equals("-decompress")) {
-               decompress=true;
+           } else if (args[current].equals("-download")) {
+               download=true;
                current+=1;
            } else throw new IllegalArgumentException("Unrecognized option: "+args[current]);
 

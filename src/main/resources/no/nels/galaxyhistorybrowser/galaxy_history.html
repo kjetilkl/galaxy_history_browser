@@ -1,0 +1,379 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+
+    <link href="https://galaxy-ntnu.bioinfo.no/static/style/jquery-ui/smoothness/jquery-ui.css" media="screen" rel="stylesheet" type="text/css" />
+    <link href="https://galaxy-ntnu.bioinfo.no/static/style/bootstrap-tour.css" media="screen" rel="stylesheet" type="text/css" />
+    <link href="https://galaxy-ntnu.bioinfo.no/static/style/base.css" media="screen" rel="stylesheet" type="text/css" />
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js" ></script>
+
+<style type="text/css">
+.tags-display .vue-tags-input .ti-tag {
+    border-radius: 4px;
+    font-size: .8rem;
+    font-weight: 400;
+}
+.ti-tag {
+    background-color: #5C6BC0;
+    color: #fff;
+    border-radius: 2px;
+    display: flex;
+    padding: 5px 7px;
+    margin: 2px;
+    font-size: .85em;
+}
+.ti-tags {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    line-height: 1em;
+}
+
+ul.ti-tags {
+  margin: 0px;
+  padding: 0px;
+  list-style-type: none; 
+}
+
+</style>
+
+<script>
+  window.onerror = function (err) {
+     $("#history-title").html('<span style="color:red;font-weight:bold;">ERROR</span>');
+     $("#history-subtitle").html(err);
+     console.log('Error: ', err);
+  };
+</script>
+
+<script>
+/**
+ * Calculate a 32 bit FNV-1a hash
+ * Found here: https://gist.github.com/vaiorabbit/5657561
+ * Ref.: http://isthe.com/chongo/tech/comp/fnv/
+ *
+ * @param {string} str the input value
+ * @returns {integer}
+ */
+function hashFnv32a(str) {
+    var i,
+        l,
+        hval = 0x811c9dc5;
+
+    for (i = 0, l = str.length; i < l; i++) {
+        hval ^= str.charCodeAt(i);
+        hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24);
+    }
+    return hval >>> 0;
+}
+
+
+/**
+ * Implement W3C contrasting color algorithm
+ * http://www.w3.org/TR/AERT#color-contrast
+ *
+ * @param   {number}  r       Red
+ * @param   {number}  g       Green
+ * @param   {number}  b       Blue
+ * @return  {string}          Either 'white' or 'black'
+ *
+ * Assumes r, g, b are in the set [0, 1]
+ */
+function contrastingColor(r, g, b) {
+    var o = (r * 255 * 299 + g * 255 * 587 + b * 255 * 114) / 1000;
+    return o > 125 ? "black" : "white";
+}
+
+/**
+ * Converts an HSL color value to RGB. Conversion formula
+ * adapted from http://en.wikipedia.org/wiki/HSL_color_space.
+ * Assumes h, s, and l are contained in the set [0, 1] and
+ * returns r, g, and b in the set [0, 1].
+ *
+ * @param   {number}  h       The hue
+ * @param   {number}  s       The saturation
+ * @param   {number}  l       The lightness
+ * @return  {Array}           The RGB representation
+ */
+function hslToRgb(h, s, l) {
+    var r, g, b;
+
+    if (s == 0) {
+        r = g = b = l; // achromatic
+    } else {
+        var hue2rgb = function hue2rgb(p, q, t) {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        };
+
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1 / 3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1 / 3);
+    }
+
+    return [r, g, b];
+}
+
+/**
+ * Simple 3-color keyed color scheme generated
+ * from a string key
+ */
+function keyedColorScheme(strKey) {
+    const hash = hashFnv32a(strKey);
+    const hue = Math.abs((hash >> 4) % 360);
+    const lightnessOffset = 75;
+    const lightness = lightnessOffset + (hash & 0xf);
+
+    const primary = `hsl(${hue}, 100%, ${lightness}%)`;
+    const darker = `hsl(${hue}, 100%, ${lightness - 40}%)`;
+    const [r, g, b] = hslToRgb(hue, 1.0, lightness / 100);
+    const contrasting = contrastingColor(r, g, b);
+
+    return { primary, darker, contrasting };
+}
+
+function toggleDetails(datasetID) {
+   element=document.getElementById("details-"+datasetID); 
+   if (element.style.display == "none") element.style.display="block";
+   else element.style.display="none";
+   return false;
+}
+
+function toggleActive(elementID) {
+   console.log("toggleActive:"+elementID);
+   $("#"+elementID).toggleClass("active");
+}
+
+function toggleDisplay(elementID) {
+   var current=$("#"+elementID).css("display");
+   console.log("toggleDisplay:"+elementID+" ["+current+"]");
+   if (current=="block") $("#"+elementID).css("display","none"); else $("#"+elementID).css("display","block");
+}
+
+
+function formatMetadata(metadata) {   
+   var annotation=metadata.annotation;
+   var historysize=("history_size" in metadata)?metadata.history_size:"";
+   var created=metadata.create_time.substr(0,metadata.create_time.indexOf(":"));
+   var updated=metadata.update_time.substr(0,metadata.update_time.indexOf(":"));
+   var subtitle="Created:\xa0"+created+"\xa0\xa0\xa0\xa0\xa0\xa0Last\xa0updated:\xa0"+updated; // Use subtitle label to display date information instead
+   $('#history-title').text(metadata.name);
+   $('#history-subtitle').text(subtitle);
+   $('#history-size').text(historysize);
+
+   if ("tags" in metadata && metadata.tags.length>0) {
+       var tagsDiv=formatTags(metadata.tags);
+       $('#history-tags').append(tagsDiv);
+       var showTagsButton=$('<a class="icon-btn history-tag-btn" title="Show history tags" href="javascript:void(0);" onClick="toggleActive(\'history-tags\');" data-original-title="Edit history tags"></a>');
+       showTagsButton.append($('<span class="fa fa-tags"></span>'));
+       $("#history-actions").append(showTagsButton);
+   }
+
+   if ("annotation" in metadata && metadata.annotation!=null && metadata.annotation!="") {
+      var showAnnotationButton=$('<a class="icon-btn history-annotate-btn" title="Show history annotation" href="javascript:void(0);" onClick="toggleDisplay(\'history-annotation\');" data-original-title="Edit history annotation"></a>');
+      showAnnotationButton.append($('<span class="fa fa-comment"></span>'));
+      $("#history-actions").append(showAnnotationButton);
+   } 
+   var annotationsDiv=$("#history-annotation");
+   annotationsDiv.append($('<label class="prompt">Annotation</label>'));
+   annotationsDiv.append($('<div class="annotation">'+metadata.annotation+'</div>'));
+}
+
+function formatDataset(dataset, index) {
+   var uniqueID=("element_encoded_id" in dataset)?dataset.element_encoded_id:dataset.encoded_id; // unique ID to use for the DOM element
+   var datasetDiv = $("<div>", {id: "dataset-"+uniqueID, "class": "list-item dataset history-content state-"+dataset.state});
+   var datasetDivPrimaryActions = $("<div>", {"class": "primary-actions"});   
+   if(dataset.class=="dataset") {
+       var viewLink=dataset.encoded_id+"/"; // the trailing slash is necessary!
+       var viewButton= $('<a class="icon-btn display-btn" title="View data" target="_blank" href="'+viewLink+'" data-original-title="View data"><span class="fa fa-eye"></span></a>');
+       datasetDivPrimaryActions.append(viewButton);
+   }
+   var datasetDivTitleBar = $("<div>", {"class": "title-bar clear","tabindex":"0"});
+   var spanIcon = $('<span class="state-icon"></span>');
+   var title = $("<div>",{"class": "title"});
+   if ("hid" in dataset) {var hid = $('<span class="hid">'+dataset.hid+'</span>'); title.append(hid);}
+   var displayTitle = $('<span class="name" onClick="toggleDetails(\''+uniqueID+'\');"> '+dataset.name+'</span>');
+   title.append(displayTitle);
+   datasetDivTitleBar.append(spanIcon);
+   datasetDivTitleBar.append(title);
+   datasetDiv.append(datasetDivPrimaryActions);
+   datasetDiv.append(datasetDivTitleBar);
+
+   if (dataset.class=="list" || dataset.class=="paired" || dataset.class=="list:paired") {
+      var collection=dataset.collection;
+      var colsize=collection.collection_size;
+      var suffix=(colsize!=1)?"s":"";
+      var coltext="";
+           if (dataset.class=="list") coltext="<div>a list with "+colsize+" item"+suffix+"</div>";
+      else if (dataset.class=="paired") coltext="<div>a dataset pair with 2 items</div>";
+      else coltext="<div>a list of pairs with "+colsize+" item"+suffix+"</div>";
+      var collectionDiv=$(coltext);
+      datasetDivTitleBar.append(collectionDiv);
+   }
+   var nametags=formatNameTags(dataset.tags);
+   datasetDivTitleBar.append(nametags);
+
+   if (dataset.class=="dataset") datasetDiv.append(formatRegularDatasetDetails(dataset));
+   else if (dataset.class=="list" || dataset.class=="paired" || dataset.class=="list:paired") datasetDiv.append(formatCollectionDetails(dataset));
+   return datasetDiv;
+}
+
+function formatRegularDatasetDetails(dataset) {
+   var uniqueID=("element_encoded_id" in dataset)?dataset.element_encoded_id:dataset.encoded_id; // unique ID to use for the DOM element
+   var info=dataset.info.trim();
+   var peek=dataset.peek.trim();  
+  
+   var detailsDiv=$("<div>", {"class": "details","style":"display:none","id": "details-"+uniqueID});  
+   var detailsSummary=$("<div>", {"class": "summary"}); 
+   detailsSummary.append($('<div class="detail-messages"></div>'));
+   detailsSummary.append($('<div class="blurb"><span class="value">'+dataset.size+'</span></div>'));
+   detailsSummary.append($('<div class="datatype"><label class="prompt">format</label><span class="value">'+dataset.extension+'</span></div>'));
+   detailsSummary.append($('<div class="dbkey"><label class="prompt">database</label><span class="value">'+dataset.dbkey+'</span></div>'));
+   detailsSummary.append($('<div class="info"><span class="value">'+info+'</span></div>')); 
+
+   var detailsActions=$("<div>", {"class": "actions clear"});   
+   var detailsActionsInnerLeft=$("<div>", {"class": "left"});   
+   var downloadName=dataset.name;
+   downloadName=downloadName.replace(/[^a-zA-Z0-9\.\-]+/g,"_");
+   if ("extra_files_path" in dataset) downloadName+=".zip";
+   else downloadName+=("."+dataset.extension);
+   detailsActionsInnerLeft.append($('<a class="download-btn icon-btn" download="'+downloadName+'" href="'+dataset.encoded_id+'/?download=true" title="Download" data-original-title="Download"><span class="fa fa-floppy-o"></span></a>'));
+
+   var detailsActionsInnerRight=$("<div>", {"class": "right"});
+   detailsActions.append(detailsActionsInnerLeft);
+   detailsActions.append(detailsActionsInnerRight);
+
+   var detailsTags=$("<div>", {"id":"tags-"+uniqueID, "class": "tags-display"});
+   if ("tags" in dataset && dataset.tags.length>0) {
+       var tagsDiv=formatTags(dataset.tags);
+       detailsTags.append(tagsDiv);
+       var showTagsButton=($('<a class="icon-btn tag-btn" title="Show dataset tags" href="javascript:void(0);" onClick="toggleActive(\'tags-'+uniqueID+'\')" data-original-title="Edit dataset tags"></a>'));
+       showTagsButton.append($('<span class="fa fa-tags"></span>'));
+       detailsActionsInnerRight.append(showTagsButton);
+   }
+ 
+   var detailsAnnotations=$("<div>", {"id":"annotation-"+uniqueID, "class": "annotation-display","style":"display:none"}); 
+   var annotationText=("annotation" in dataset && dataset.annotation!=null && dataset.annotation!="")?dataset.annotation:" ";
+   detailsAnnotations.append($('<label class="prompt">Annotation</label>'));
+   detailsAnnotations.append($('<div class="annotation">'+annotationText+'</div>'));
+   if (annotationText!=" ") {
+      var showAnnotationButton=$('<a class="icon-btn annotate-btn" title="Show dataset annotation" href="javascript:void(0);" onClick="toggleDisplay(\'annotation-'+uniqueID+'\')" data-original-title="Edit dataset annotation"></a>');
+      showAnnotationButton.append($('<span class="fa fa-comment"></span>'));
+      detailsActionsInnerRight.append(showAnnotationButton);
+   }
+
+   detailsDiv.append(detailsSummary);
+   detailsDiv.append(detailsActions);  
+   detailsDiv.append(detailsTags);
+   detailsDiv.append(detailsAnnotations);
+   detailsDiv.append($('<pre class="dataset-peek">'+peek+'</pre>'));
+   return detailsDiv;
+}
+
+
+function formatCollectionDetails(dataset) {
+   var detailsDiv=$("<div>",{"class":"details","style":"display:none","id":"details-"+dataset.encoded_id});
+   var listPanelDiv=$("<div>",{"class":"list-panel dataset-collection-panel"});
+   var listItemsDiv=$("<div>",{"class":"list-items"});
+   
+   listPanelDiv.append(listItemsDiv);
+   listPanelDiv.append($('<div class="empty-message infomessagesmall" style="display: none;">This list is empty</div>'));
+        
+   let elements=dataset.collection.elements;
+   for(let i=0;i< elements.length; i++) {
+      let element=elements[i];
+      if ("dataset" in element) {
+          let child=element.dataset;
+          if ("name" in element) child.name=element.name; // copy 'display name' from element into child (this could be e.g. "forward" or "reverse")
+          listItemsDiv.append(formatDataset(child));
+      }
+      else if ("collection" in element){ // nested collection
+          let child=element.collection;
+          listItemsDiv.append(formatDataset(element)); //
+      }
+   }
+  
+   detailsDiv.append(listPanelDiv);
+   return detailsDiv;
+}
+
+function formatTags(tags) {
+   var tagsOuter=$('<div class="vue-tags-input tags-input tag-area">');
+   var tagsInner=$('<div class="ti-input">');
+   var tagsList=$('<ul class="ti-tags">');
+   for (let i=0;i<tags.length;i++) {
+      tagsList.append($('<li tabindex="'+(i+1)+'" class="ti-tag ti-valid"><div class="ti-content"><div class="ti-tag-center"><div class="tag-name">'+tags[i]+'</div></div></div></li>'));
+   }
+   tagsInner.append(tagsList);
+   tagsOuter.append(tagsInner);
+   return tagsOuter;
+}
+
+function formatNameTags(tags) {
+   var tagsOuter=$('<div class="nametags" title="0 nametags">');
+   if (tags==null || tags.length==0) return tagsOuter;
+   var count=0;
+   for(let i=0;i<tags.length; i++) {
+     if (tags[i].startsWith("name:")) {
+         let tagname=tags[i].substr(5);
+         const { primary, contrasting, darker } = keyedColorScheme(tags[i]);        
+         tagsOuter.append($('<span class="badge badge-tags" style="background-color: '+primary+'; color: '+contrasting+'; border-color: '+darker+';"> '+tagname+' </span>'));
+         count++;
+     }
+   }
+   tagsOuter.prop('title', count+" nametags");
+   return tagsOuter;
+}
+
+
+$(document).ready(function(){
+   $.getJSON("history.json" , function(data) { 
+        formatMetadata(data.metadata);
+        for (let i = 0; i < data.contents.length; i++) {
+           let datasetDiv=formatDataset(data.contents[i]);
+           $("#history-items").append(datasetDiv);
+        }
+   })
+   .fail(function( jqxhr, textStatus, error ) {
+        var err = "["+textStatus + "] " + error;
+        $("#history-title").html('<span style="color:red;font-weight:bold;">ERROR</span>');
+        $("#history-subtitle").html(err);
+        console.log( "Request Failed: " + err );
+   });
+});
+
+</script>
+
+</head>
+
+<body>
+
+<!-- Added outer DIV-wrapper just to control the width of the panel -->
+  <div id="outer-container" style="display:inline-block;border:1px solid black;resize: horizontal; overflow:auto; min-width:250px;">
+    <div class="list-panel history-panel current-history-panel unified-panel unified-panel-body">
+
+       <!-- History header with controls -->
+       <div class="controls">
+         <div class="title"><div class="name" title="" id="history-title"><i class="fa fa-spinner fa-spin">&nbsp;</i> Loading history...</div></div>
+         <div class="subtitle"><span class="shown-count" id="history-subtitle"></span></div>
+         <div class="history-size" id="history-size"></div>
+         <div class="actions" id="history-actions"></div>
+         <div class="messages"><div class="quota-message errormessage">You are over your disk quota. Tool execution is on hold until your disk usage drops below your allocated quota.</div></div>
+         <div class="tags-display" id="history-tags"></div>    
+         <div class="annotation-display" id="history-annotation" style="display: none;"></div>
+       </div>
+
+       <ul class="list-items" id="history-items"> 
+       </ul>
+
+    </div> <!-- end of history panel -->
+  </div> <!-- end of outer container -->
+</body>
+
+</html>

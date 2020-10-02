@@ -10,6 +10,7 @@ package no.nels.galaxyhistorybrowser;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.BeanProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.io.FileInputStream;
@@ -29,6 +30,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.apache.commons.compress.archivers.tar.*;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
@@ -261,8 +264,55 @@ public class GalaxyHistoryArchive {
             } else return "text/plain";
         } catch (Exception e) {
             return "text/plain"; //
+        }        
+    }
+    
+    /**
+     * A convenience method to determine the MIME type of a dataset or extra file
+     * depending on the whether it is to be output in "view mode" or "download mode".
+     * In download mode (download==true), most files are returned "as is" except for datasets with extra files, which are returned as ZIP archives.
+     * If a dataset is compressed, the MIME type of the compression format is returned.
+     * In view mode (download==false), files that are compressed will be decompressed before being output, and the returned MIME type will be that of the decompressed file.
+     * @param datasetID The "encoded_id" attribute of the dataset
+     * @param extraFilePath The name/path of the extra file (this could include subdirectory prefixes). If this is NULL, the MIME type of the main dataset will be returned 
+     * @param download Specifies whether the dataset/file is to be output in "download" mode (true) or "view" mode (false)
+     * @return the MIME type of the dataset or extra file
+     */
+    public String getMIMEtype(String datasetID, String extraFilePath, boolean download) {
+        if (download) { // "download mode"
+            if (extraFilePath==null) {
+                if (hasExtraFiles(datasetID)) return "application/zip";
+                else return getMIMEtypeForDataset(datasetID, false);
+            } else { // extra file
+                int p=extraFilePath.indexOf('.');
+                String ext=extraFilePath.substring((p>0)?p:0); // get file suffix from extra file
+                return getMIMEtypeFromExtension(ext, false);             
+             } 
+        } else { // "view mode"
+            if (extraFilePath==null) {
+                return getMIMEtypeForDataset(datasetID, true);
+            }  else {
+                int p=extraFilePath.indexOf('.');
+                String ext=extraFilePath.substring((p>0)?p:0); // get file suffix from extra file
+                return getMIMEtypeFromExtension(ext, true);    
+            }
         }
-        
+    }    
+    
+    /**
+     * Returns TRUE if the dataset with the given ID has associated "extra files" (such as images for a HTML dataset)
+     * @param datasetID
+     * @return TRUE if the dataset has extra files and FALSE if the dataset does not have extra files or the dataset could not be found
+     */
+    public boolean hasExtraFiles(String datasetID)  {
+        try {
+            Map dataset=getDataset("encoded_id",datasetID);
+            if (dataset==null) return false;
+            String directory=(String)dataset.get("extra_files_path");
+            return (directory!=null && !directory.isEmpty());
+        } catch (IOException iox) {
+            return false;
+        }
     }
     
     /**
@@ -319,7 +369,7 @@ public class GalaxyHistoryArchive {
         TarArchiveInputStream tarInput = new TarArchiveInputStream(new GzipCompressorInputStream(source));
         TarArchiveEntry currentEntry = tarInput.getNextTarEntry();
         while (currentEntry != null && !currentEntry.getName().equals(filepath)) {
-            currentEntry = tarInput.getNextTarEntry(); // You forgot to iterate to the next file
+            currentEntry = tarInput.getNextTarEntry(); 
         }
         if (currentEntry!=null && currentEntry.getName().equals(filepath)) {
             if (filepath.endsWith(".gz")) return new InputStreamReader(new GzipCompressorInputStream(tarInput));
@@ -341,7 +391,7 @@ public class GalaxyHistoryArchive {
         TarArchiveInputStream tarInput = new TarArchiveInputStream(new GzipCompressorInputStream(source));
         TarArchiveEntry currentEntry = tarInput.getNextTarEntry();
         while (currentEntry != null && !currentEntry.getName().equals(filepath)) {
-            currentEntry = tarInput.getNextTarEntry(); // You forgot to iterate to the next file
+            currentEntry = tarInput.getNextTarEntry();
         }
         if (currentEntry!=null && currentEntry.getName().equals(filepath)) {
             if (filepath.endsWith(".gz") && decompress) return new GzipCompressorInputStream(tarInput);
@@ -351,9 +401,32 @@ public class GalaxyHistoryArchive {
     }      
     
     /**
+     * This is a convenience method that will in turn call any of the other outputDatasetXXX methods depending on the given parameters 
+     * @param outstream The stream to output the dataset to
+     * @param datasetID The "encoded_id" attribute of the dataset to output
+     * @param extraFilePath The name/path of the extra file (this could include subdirectory prefixes). If this is NULL, the main dataset file will be output
+     * @param download In Download mode (true), most datasets and files will be output "as is", i.e. compressed datasets will be output as such.
+     *                 The only exception is datasets with extra files, which will be output as ZIP archives containing the main dataset plus all the extra files.
+     *                 If View mode (download==false), compressed datasets will be decompressed before being output
+     * @throws IOException if the history archive file itself could not be read or the contents of the archive file could not be properly processed or the dataset or extra file could not be accessed
+     */     
+    public void outputDataset(OutputStream outstream, String datasetID, String extraFilePath, boolean download) throws IOException {
+         if (download) { // "download mode"
+             if (extraFilePath==null) {
+                 if (hasExtraFiles(datasetID)) outputDatasetWithExtraFiles(outstream, datasetID);
+                 else outputDataset(outstream, datasetID, false);
+             } // decompress files in "view mode"
+             else outputDatasetExtraFile(outstream, datasetID, extraFilePath, false); // throw new IOException("'extra files' cannot be output directly in 'download mode'");
+         } else { // "view mode"
+             if (extraFilePath==null) outputDataset(outstream, datasetID, true); // decompress files in "view mode"
+             else outputDatasetExtraFile(outstream, datasetID, extraFilePath, true);
+         }
+    }
+    
+    /**
      * Outputs a full dataset file to an output stream
      * @param outstream The stream to output the dataset to
-     * @param datasetID The "encoded_id" attribtute of the dataset to output
+     * @param datasetID The "encoded_id" attribute of the dataset to output
      * @param decompress If the decompress parameter is TRUE, compressed files inside the archive (with either '.gz' or '.bz2' file suffix) will be decompressed 
      * @throws IOException if the history archive file itself could not be read or the contents of the archive file could not be properly processed or the dataset with the given ID could not be accessed
      */    
@@ -436,6 +509,58 @@ public class GalaxyHistoryArchive {
             }
         }
     }    
+    
+    /**
+     * Creates a ZIP archive containing a dataset and its associated files and outputs it to an output stream
+     * @param outstream The stream to output the zip archive to    
+     * @param datasetID The "encoded_id" of the parent dataset
+     * @throws IOException if the history archive file itself could not be read or the contents of the archive file could not be properly processed or the dataset did not have any associated extra files
+     */    
+    public void outputDatasetWithExtraFiles(OutputStream outstream, String datasetID) throws IOException {
+        Map dataset=getDataset("encoded_id",datasetID);
+        if (dataset==null) throw new IOException("Dataset not found in history: "+datasetID);
+        String filename=(String)dataset.get("file_name");
+        if (filename==null) throw new IOException("Missing filepath for dataset");   
+        String newDatasetFileName=filename; // (String)dataset.get("name")+"."+(String)dataset.get("extension"); // name main file after dataset name
+        if (newDatasetFileName.startsWith("datasets/")) newDatasetFileName=newDatasetFileName.substring("datasets/".length()); // remove directory prefix
+        // newDatasetFileName=newDatasetFileName.replaceAll("[^a-zA-Z0-9\\.\\-]", "_"); // replace troublesome characters in the filename     
+        String directory=(String)dataset.get("extra_files_path");
+        //if (directory==null) throw new IOException("Dataset does not include extra files");
+        directory+="/";
+        ZipOutputStream zipArchiveOutputStream = new ZipOutputStream(outstream);
+        InputStream source=(archivepath.startsWith("http:") || archivepath.startsWith("https:"))?((new URL(archivepath)).openStream()):new FileInputStream(archivepath);
+        TarArchiveInputStream tarInput = new TarArchiveInputStream(new GzipCompressorInputStream(source));
+        TarArchiveEntry currentEntry = tarInput.getNextTarEntry();
+        while (currentEntry != null) {
+            String currentEntryName=currentEntry.getName();
+            if (currentEntryName.equals(filename)) { // main dataset file
+                ZipEntry zipEntry = new ZipEntry(newDatasetFileName);
+                zipArchiveOutputStream.putNextEntry(zipEntry); // Start adding a new archive entry
+                copyFromTarGZtoZIP(tarInput,zipArchiveOutputStream);
+                // System.err.println("Copy main file ["+filename+"] to ["+newDatasetFileName+"]");
+            }
+	    if (currentEntryName.startsWith(directory) && !currentEntryName.endsWith("/")) { // extra file (not a directory)
+                String extraFileName=currentEntryName.substring(directory.length()); // remove the subdirectory folder from the original tar.gz archive to move the file up one level in the new ZIP file
+                ZipEntry zipEntry = new ZipEntry(extraFileName);
+                zipArchiveOutputStream.putNextEntry(zipEntry); // Start adding a new archive entry
+                copyFromTarGZtoZIP(tarInput,zipArchiveOutputStream); 
+                // System.err.println("Copy extra file ["+currentEntryName+"] to ["+extraFileName+"]");                
+            }
+            currentEntry = tarInput.getNextTarEntry(); 
+        }      
+        zipArchiveOutputStream.finish(); // This finalizes the archive by writing the central directory to the stream
+        zipArchiveOutputStream.flush(); //  This is also needed in order to output the rest of the archive without closing the stream (and thus also closing the underlying output stream)
+    }
+    
+    /** Reads a file from an input stream of a TAR.GZ archvie and outputs it to the output stream of the ZIP archive */
+    private void copyFromTarGZtoZIP(TarArchiveInputStream input, ZipOutputStream output) throws IOException {
+        int BUFFER=10000; // 
+        byte data[] = new byte[BUFFER];
+        int count;
+        while((count = input.read(data, 0, BUFFER)) != -1) {
+            output.write(data, 0, count);
+        }        
+    }
     
     /**
      * Reads the contents of a specified JSON file within the history archive file 
